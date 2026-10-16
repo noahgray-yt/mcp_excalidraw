@@ -195,7 +195,7 @@ npx -y mcp-excalidraw-server install-skill --dir <skills-root>
 npx -y mcp-excalidraw-server install-skill --print-source  # inspect bundled source path
 ```
 
-> **Security note:** The canvas server binds `127.0.0.1` only by default. If you expose it on a network interface (`HOST=0.0.0.0`), put network-level access controls in front — the API has no built-in authentication.
+> **Security note:** The canvas server binds `127.0.0.1` only by default. If you expose it on a network interface (`HOST=0.0.0.0`), put network-level access controls in front — the API has no built-in authentication. Browser requests are only accepted from the canvas page itself (same origin) or from origins listed in `EXCALIDRAW_ALLOWED_ORIGINS`, so other websites open in your browser cannot read or change the canvas; on a loopback bind the `Host` header must also be a loopback name, which blocks DNS-rebinding attacks.
 
 ## Agent Skill
 
@@ -264,10 +264,11 @@ The MCP server runs over stdio. Since v1.1 the simplest config is `npx` — no c
 | `EXPRESS_SERVER_URL` | URL of the canvas server | `http://127.0.0.1:3000` |
 | `ENABLE_CANVAS_SYNC` | Enable real-time canvas sync | `true` |
 | `EXCALIDRAW_NO_AUTOSTART` | Set `1` to disable canvas auto-start | (unset) |
-| `EXCALIDRAW_EXPORT_DIR` | Base directory MCP file exports may write to | current working dir |
+| `EXCALIDRAW_EXPORT_DIR` | Base directory MCP file imports/exports are confined to (symlinks are resolved) | current working dir |
 | `EXCALIDRAW_RENDER_MAX_DIM` | Largest side of a headless PNG, in pixels | `8192` |
 | `EXCALIDRAW_DATA_DIR` | Optional local durable-state directory | (unset; in-memory) |
 | `PORT` / `HOST` | Canvas server bind address | `3000` / `127.0.0.1` |
+| `EXCALIDRAW_ALLOWED_ORIGINS` | Comma-separated extra browser origins allowed to call the canvas API (e.g. `http://localhost:8080`) | (unset; same origin only) |
 | `LOG_LEVEL` | Log verbosity (`error`, `warn`, `info`, `debug`) | `info` |
 | `LOG_FILE_PATH` | Log file location | `~/Library/Logs/excalidraw-mcp.log` (macOS), `$XDG_STATE_HOME/excalidraw-mcp/excalidraw.log` (Linux), `%LOCALAPPDATA%\Excalidraw-MCP\excalidraw.log` (Windows) |
 

@@ -1,12 +1,43 @@
+import fs from 'fs';
 import path from 'path';
 import { generateId, ServerElement, normalizeFontFamily } from '../types.js';
 import { ALLOWED_EXPORT_DIR } from './config.js';
 
-// Safe file path validation to prevent path traversal attacks
+// Resolve symlinks in the longest existing prefix of `target`; the missing
+// tail (a file about to be written) is appended unchanged. A dangling symlink
+// is rejected because writing through it would create its target.
+function realPathOf(target: string): string | null {
+  const missing: string[] = [];
+  let current = target;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(current), ...missing);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      try {
+        fs.lstatSync(current);
+        return null;
+      } catch { /* does not exist at all */ }
+      const parent = path.dirname(current);
+      if (parent === current) return target;
+      missing.unshift(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+function isInside(target: string, dir: string): boolean {
+  return target === dir || target.startsWith(dir + path.sep);
+}
+
+// Safe file path validation to prevent path traversal attacks, including
+// escapes through symlinks inside the allowed directory.
 export function sanitizeFilePath(filePath: string): string {
   const resolved = path.resolve(filePath);
   const allowedDir = path.resolve(ALLOWED_EXPORT_DIR);
-  if (!resolved.startsWith(allowedDir + path.sep) && resolved !== allowedDir) {
+  const realResolved = realPathOf(resolved);
+  const realAllowedDir = realPathOf(allowedDir) ?? allowedDir;
+  if (!isInside(resolved, allowedDir) || realResolved === null || !isInside(realResolved, realAllowedDir)) {
     throw new Error(
       `Path traversal blocked: "${filePath}" resolves outside the allowed directory "${allowedDir}". ` +
       `Set EXCALIDRAW_EXPORT_DIR to change the allowed base directory.`

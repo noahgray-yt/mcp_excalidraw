@@ -1,6 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// The canvas server rejects foreign Origin headers; present proxied dev
+// requests as same-origin with the canvas server.
+const canvasProxy = {
+  target: 'http://127.0.0.1:3000',
+  changeOrigin: true,
+  configure: (proxy) => {
+    proxy.on('proxyReq', (proxyReq) => {
+      if (proxyReq.getHeader('origin')) proxyReq.setHeader('origin', 'http://127.0.0.1:3000')
+    })
+  },
+}
+
 export default defineConfig({
   root: 'frontend',
   plugins: [react()],
@@ -23,14 +35,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:3000',
-        changeOrigin: true,
-      },
-      '/health': {
-        target: 'http://127.0.0.1:3000',
-        changeOrigin: true,
-      },
+      '/api': canvasProxy,
+      '/health': canvasProxy,
     },
   },
 })

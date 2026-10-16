@@ -29,6 +29,7 @@ import {
 import { z } from 'zod';
 import WebSocket from 'ws';
 import { isMainModule } from './core/entry.js';
+import { createRequestGuard, parseAllowedOrigins } from './core/request-guard.js';
 import { writePidFile, removePidFile } from './core/pidfile.js';
 import { renderScene, RenderError, MAX_SCALE } from './core/render/index.js';
 import {
@@ -55,12 +56,36 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const PORT = parseInt(process.env.PORT || '3000', 10);
+const HOST = process.env.HOST || '127.0.0.1';
+
+// Only same-origin pages (the canvas UI itself), explicitly allowed origins
+// and non-browser clients may use the API; see core/request-guard.ts.
+const requestGuard = createRequestGuard({
+  bindHost: HOST,
+  allowedOrigins: parseAllowedOrigins(process.env.EXCALIDRAW_ALLOWED_ORIGINS)
+});
+
 const app = express();
 const server = createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  verifyClient: ({ req }, done) => {
+    if (requestGuard.isAllowedRequest(req.headers)) return done(true);
+    logger.warn('Rejected WebSocket connection', { origin: req.headers.origin, host: req.headers.host });
+    done(false, 403, 'Forbidden');
+  }
+});
 
 // Middleware
-app.use(cors());
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (requestGuard.isAllowedRequest(req.headers)) return next();
+  logger.warn('Rejected cross-origin request', { method: req.method, path: req.path, origin: req.headers.origin, host: req.headers.host });
+  res.status(403).json({ success: false, error: 'Forbidden: origin or host not allowed' });
+});
+app.use(cors((req, callback) => {
+  callback(null, { origin: req.headers.origin !== undefined && requestGuard.isAllowedOrigin(req.headers.origin, req.headers.host) });
+}));
 app.use(express.json({ limit: '10mb' }));
 
 // Serve static files from the build directory
@@ -1484,8 +1509,6 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 });
 
 // Start server
-const PORT = parseInt(process.env.PORT || '3000', 10);
-const HOST = process.env.HOST || '127.0.0.1';
 const LOOPBACK_GUARD_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0', '::']);
 const LOOPBACK_ADDRESSES = ['127.0.0.1', '::1'];
 
